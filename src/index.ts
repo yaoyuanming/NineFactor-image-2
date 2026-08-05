@@ -225,7 +225,7 @@ basekit.addField({
       };
     }
 
-    const authHeader = { 'X-Api-Key': apiKey.trim() };
+    const authHeader = { 'Open-Api-Token': apiKey.trim() };
 
     try {
       // 2. 上传参考图片到 OSS（如果有）
@@ -363,7 +363,7 @@ async function uploadImageToOss(
       method: 'POST',
       headers: {
         'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        'X-Api-Key': apiKey,
+        'Open-Api-Token': apiKey,
       },
       body: body,
     });
