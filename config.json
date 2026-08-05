@@ -1,0 +1,10 @@
+{
+  "authorizations": [
+    {
+      "id": "auth_ninefactor",
+      "params": {
+        "apiKey": "sk-51cf3242d1ba401a896b59613c837723"
+      }
+    }
+  ]
+}
