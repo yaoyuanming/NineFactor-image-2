@@ -30,7 +30,13 @@ function computeSize(ratio: string, resolution: string): string {
 }
 
 // ========== 域名白名单 ==========
-basekit.addDomainList(['ai-base.theninefactor.com', 'feishu.cn']);
+basekit.addDomainList([
+  'ai-test.theninefactor.com',
+  'ai-base.theninefactor.com',
+  'ninefactory-test-open.oss-cn-beijing.aliyuncs.com',
+  'open.feishu.cn',
+  'internal-api-drive-stream.feishu.cn',
+]);
 
 // ========== 授权配置 ==========
 basekit.addField({
@@ -40,7 +46,7 @@ basekit.addField({
   i18n: {
     messages: {
       'zh-CN': {
-        apiKeyLabel: 'OpenAPI Token',
+        apiKeyLabel: '九因API key',
         promptLabel: '提示词',
         promptPlaceholder: '请输入图片描述/提示词',
         refImageLabel: '参考图片（可选）',
@@ -54,7 +60,7 @@ basekit.addField({
         generateFail: '图片生成失败',
       },
       'en-US': {
-        apiKeyLabel: 'OpenAPI Token',
+        apiKeyLabel: '九因API key',
         promptLabel: 'Prompt',
         promptPlaceholder: 'Enter image description / prompt',
         refImageLabel: 'Reference Image (optional)',
@@ -68,7 +74,7 @@ basekit.addField({
         generateFail: 'Image generation failed',
       },
       'ja-JP': {
-        apiKeyLabel: 'OpenAPIトークン',
+        apiKeyLabel: '九因API key',
         promptLabel: 'プロンプト',
         promptPlaceholder: '画像の説明/プロンプトを入力',
         refImageLabel: '参考画像（任意）',
@@ -90,8 +96,23 @@ basekit.addField({
       key: 'apiKey',
       label: t('apiKeyLabel'),
       component: FieldComponent.Input,
+      tooltips: [
+        {
+          type: 'text',
+          content: '前往',
+        },
+        {
+          type: 'link',
+          text: '九因官网',
+          link: 'https://ai.theninefactor.com/',
+        },
+        {
+          type: 'text',
+          content: '获取',
+        },
+      ],
       props: {
-        placeholder: '请输入 OpenAPI Token',
+        placeholder: '请输入九因API Key',
       },
       validator: {
         required: true,
@@ -194,7 +215,7 @@ basekit.addField({
     if (!apiKey || !apiKey.trim()) {
       return {
         code: FieldCode.InvalidArgument,
-        msg: '请输入 OpenAPI Token',
+        msg: '请输入九因API key',
       };
     }
     if (!prompt || !prompt.trim()) {
@@ -204,7 +225,7 @@ basekit.addField({
       };
     }
 
-    const authHeader = { 'Open-Api-Token': apiKey.trim() };
+    const authHeader = { 'X-Api-Key': apiKey.trim() };
 
     try {
       // 2. 上传参考图片到 OSS（如果有）
@@ -342,7 +363,7 @@ async function uploadImageToOss(
       method: 'POST',
       headers: {
         'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        'Open-Api-Token': apiKey,
+        'X-Api-Key': apiKey,
       },
       body: body,
     });
