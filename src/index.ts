@@ -143,7 +143,7 @@ basekit.addField({
     {
       key: 'aspectRatio',
       label: t('aspectRatioLabel'),
-      component: FieldComponent.SingleSelect,
+      component: FieldComponent.Radio,
       props: {
         options: [
           { label: '1:1', value: '1:1' },
@@ -162,7 +162,7 @@ basekit.addField({
     {
       key: 'resolution',
       label: t('resolutionLabel'),
-      component: FieldComponent.SingleSelect,
+      component: FieldComponent.Radio,
       props: {
         options: [
           { label: '1K', value: '1K' },
@@ -177,7 +177,7 @@ basekit.addField({
     {
       key: 'quality',
       label: t('qualityLabel'),
-      component: FieldComponent.SingleSelect,
+      component: FieldComponent.Radio,
       props: {
         options: [
           { label: '低 (Low)', value: 'low' },
