@@ -1,7 +1,7 @@
 {
-  "name": "ninefactor-image-gen",
+  "name": "ninefactor-chat",
   "version": "1.0.0",
-  "description": "九因科技 AI 图片生成 - 飞书多维表格字段捷径插件",
+  "description": "九因科技 AI 对话 - 飞书多维表格字段捷径插件（gemini-3.5-flash）",
   "main": "src/index.ts",
   "scripts": {
     "start": "block-basekit-cli start:field",
