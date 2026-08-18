@@ -10,7 +10,7 @@ const { t } = field;
 
 // ========== 常量配置 ==========
 const API_BASE = 'https://ai-base.theninefactor.com';
-const MODEL = 'gpt-5.6-terra';
+const MODEL = 'gemini-3.5-flash';
 
 // ========== 域名白名单 ==========
 basekit.addDomainList([
