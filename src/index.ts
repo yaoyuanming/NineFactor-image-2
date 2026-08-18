@@ -16,6 +16,7 @@ const MODEL = 'gpt-5.6-terra';
 basekit.addDomainList([
   'ai-test.theninefactor.com',
   'ai-base.theninefactor.com',
+  "ai-base.yiguangshan.com",
   'ninefactory-test-open.oss-cn-beijing.aliyuncs.com',
   'open.feishu.cn',
   'internal-api-drive-stream.feishu.cn',
@@ -34,10 +35,13 @@ basekit.addField({
         systemPromptPlaceholder: '请输入系统提示词（设定AI角色与行为规则）',
         userPromptLabel: '对话提示词',
         userPromptPlaceholder: '请输入对话提示词（每次对话的用户消息）',
+        imagesLabel: '图片附件',
+        imagesPlaceholder: '选择图片附件字段（可选，支持多张图片）',
         noApiKey: '请输入九因API key',
         noSystemPrompt: '请输入系统提示词',
         noUserPrompt: '请输入对话提示词',
         callFail: '对话请求失败',
+        ossUploadFail: '图片上传OSS失败',
       },
       'en-US': {
         apiKeyLabel: '九因API key',
@@ -45,10 +49,13 @@ basekit.addField({
         systemPromptPlaceholder: 'Enter system prompt (define AI role and behavior rules)',
         userPromptLabel: 'User Prompt',
         userPromptPlaceholder: 'Enter user prompt (message for each conversation)',
+        imagesLabel: 'Image Attachments',
+        imagesPlaceholder: 'Select image attachment field (optional, multiple images supported)',
         noApiKey: 'Please enter 九因API key',
         noSystemPrompt: 'Please enter system prompt',
         noUserPrompt: 'Please enter user prompt',
         callFail: 'Chat request failed',
+        ossUploadFail: 'Image upload to OSS failed',
       },
       'ja-JP': {
         apiKeyLabel: '九因API key',
@@ -56,10 +63,13 @@ basekit.addField({
         systemPromptPlaceholder: 'システムプロンプトを入力（AIの役割と動作ルールを設定）',
         userPromptLabel: 'ユーザープロンプト',
         userPromptPlaceholder: 'ユーザープロンプトを入力（会話のユーザーメッセージ）',
+        imagesLabel: '画像添付',
+        imagesPlaceholder: '画像添付フィールドを選択（オプション、複数画像対応）',
         noApiKey: '九因API keyを入力してください',
         noSystemPrompt: 'システムプロンプトを入力してください',
         noUserPrompt: 'ユーザープロンプトを入力してください',
         callFail: 'チャットリクエストに失敗しました',
+        ossUploadFail: '画像のOSSアップロードに失敗しました',
       },
     },
   },
@@ -114,6 +124,18 @@ basekit.addField({
         required: true,
       },
     },
+    {
+      key: 'images',
+      label: t('imagesLabel'),
+      component: FieldComponent.FieldSelect,
+      props: {
+        placeholder: t('imagesPlaceholder'),
+        supportType: [FieldType.Attachment],
+      },
+      validator: {
+        required: false,
+      },
+    },
   ],
 
   // ========== 返回类型：多行文本字段 ==========
@@ -123,11 +145,12 @@ basekit.addField({
 
   // ========== 执行函数 ==========
   execute: async (formItemParams: any, context: any) => {
-    const { apiKey, systemPrompt, userPrompt } = formItemParams;
+    const { apiKey, systemPrompt, userPrompt, images } = formItemParams;
     console.log('=== [Execute] Input params:', JSON.stringify({
       apiKey: apiKey ? '***' + apiKey.slice(-4) : null,
       systemPrompt: systemPrompt?.substring(0, 50) + '...',
       userPrompt: userPrompt?.substring(0, 50) + '...',
+      imagesCount: images?.length || 0,
     }));
 
     // 1. 校验参数
@@ -147,7 +170,54 @@ basekit.addField({
     const authHeader = { 'Open-Api-Token': apiKey.trim() };
 
     try {
-      // 2. 构造对话请求
+      // 2. 处理图片附件：下载并上传到 OSS
+      const imageUrls: string[] = [];
+      if (images && images.length > 0) {
+        console.log(`=== [OSS] Processing ${images.length} image attachment(s)`);
+        for (let i = 0; i < images.length; i++) {
+          const img = images[i];
+          console.log(`=== [OSS] Image ${i + 1}: name=${img.name}, size=${img.size}, type=${img.type}`);
+
+          // 下载附件获取 buffer
+          const imgRes = await context.fetch(img.tmp_url);
+          if (!imgRes.ok) {
+            console.error(`=== [OSS] Failed to download image ${i + 1}:`, imgRes.statusText);
+            return { code: FieldCode.Error, msg: `${t('ossUploadFail')}: ${img.name}` };
+          }
+          const imgBuffer = await imgRes.buffer();
+
+          // 构造 multipart/form-data 上传到 OSS
+          const boundary = `----FormBoundary${Date.now()}${i}`;
+          const imgBodyParts: string[] = [];
+          imgBodyParts.push(`--${boundary}\r\n`);
+          imgBodyParts.push(`Content-Disposition: form-data; name="file"; filename="${img.name}"\r\n`);
+          imgBodyParts.push(`Content-Type: ${img.type || 'application/octet-stream'}\r\n\r\n`);
+          const header = Buffer.from(imgBodyParts.join(''), 'utf-8');
+          const footer = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf-8');
+          const uploadBody = Buffer.concat([header, imgBuffer, footer]);
+
+          console.log(`=== [OSS] Uploading image ${i + 1} to OSS...`);
+          const ossRes = await context.fetch(`${API_BASE}/resource/oss/openApi/upload`, {
+            method: 'POST',
+            headers: {
+              ...authHeader,
+              'Content-Type': `multipart/form-data; boundary=${boundary}`,
+            },
+            body: uploadBody,
+          });
+          const ossData = await ossRes.json();
+          console.log(`=== [OSS] Upload response ${i + 1}:`, JSON.stringify(ossData));
+
+          if ((ossData.code !== 0 && ossData.code !== 200) || !ossData.data?.url) {
+            console.error(`=== [OSS] Upload failed for image ${i + 1}:`, ossData.msg);
+            return { code: FieldCode.Error, msg: `${t('ossUploadFail')}: ${ossData.msg || img.name}` };
+          }
+          imageUrls.push(ossData.data.url);
+          console.log(`=== [OSS] Image ${i + 1} uploaded, URL: ${ossData.data.url}`);
+        }
+      }
+
+      // 3. 构造对话请求
       const messages: any[] = [];
       if (systemPrompt && systemPrompt.trim()) {
         messages.push({
@@ -155,10 +225,22 @@ basekit.addField({
           content: systemPrompt.trim(),
         });
       }
-      messages.push({
-        role: 'user',
-        content: userPrompt.trim(),
-      });
+
+      // 构造 user message：有图片时用 content 数组（OpenAI vision 格式）
+      if (imageUrls.length > 0) {
+        const contentParts: any[] = [
+          { type: 'text', text: userPrompt.trim() },
+        ];
+        for (const url of imageUrls) {
+          contentParts.push({
+            type: 'image_url',
+            image_url: { url },
+          });
+        }
+        messages.push({ role: 'user', content: contentParts });
+      } else {
+        messages.push({ role: 'user', content: userPrompt.trim() });
+      }
 
       const requestBody: any = {
         model: MODEL,
@@ -171,7 +253,9 @@ basekit.addField({
         ...requestBody,
         messages: messages.map((m: any) => ({
           role: m.role,
-          content: m.content.substring(0, 100) + '...',
+          content: typeof m.content === 'string'
+            ? m.content.substring(0, 100) + '...'
+            : m.content.map((c: any) => c.type === 'text' ? { type: 'text', text: c.text.substring(0, 100) + '...' } : c),
         })),
       }));
 
