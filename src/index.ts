@@ -45,6 +45,8 @@ basekit.addField({
         resolutionPlaceholder: '请输入视频分辨率（如 480p、720p）',
         imagesLabel: '参考图片附件',
         imagesPlaceholder: '选择图片附件字段（可选，作为参考图）',
+        referenceVideoLabel: '参考视频附件',
+        referenceVideoPlaceholder: '选择视频附件字段（可选，作为参考视频）',
         generateAudioLabel: '输出声音',
         noApiKey: '请输入九因API key',
         noText: '请输入提示文本',
@@ -66,6 +68,8 @@ basekit.addField({
         resolutionPlaceholder: 'Enter video resolution (e.g. 480p, 720p)',
         imagesLabel: 'Reference Image Attachments',
         imagesPlaceholder: 'Select image attachment field (optional, as reference image)',
+        referenceVideoLabel: 'Reference Video Attachments',
+        referenceVideoPlaceholder: 'Select video attachment field (optional, as reference video)',
         generateAudioLabel: 'Output Audio',
         noApiKey: 'Please enter 九因API key',
         noText: 'Please enter prompt text',
@@ -87,6 +91,8 @@ basekit.addField({
         resolutionPlaceholder: '動画解像度を入力（例: 480p、720p）',
         imagesLabel: '参考画像添付',
         imagesPlaceholder: '画像添付フィールドを選択（オプション、参考画像として使用）',
+        referenceVideoLabel: '参考動画添付',
+        referenceVideoPlaceholder: '動画添付フィールドを選択（オプション、参考動画として使用）',
         generateAudioLabel: 'オーディオ出力',
         noApiKey: '九因API keyを入力してください',
         noText: 'プロンプトテキストを入力してください',
@@ -203,6 +209,18 @@ basekit.addField({
       },
     },
     {
+      key: 'referenceVideo',
+      label: t('referenceVideoLabel'),
+      component: FieldComponent.FieldSelect,
+      props: {
+        placeholder: t('referenceVideoPlaceholder'),
+        supportType: [FieldType.Attachment],
+      },
+      validator: {
+        required: false,
+      },
+    },
+    {
       key: 'generateAudio',
       label: t('generateAudioLabel'),
       component: FieldComponent.Radio,
@@ -219,14 +237,14 @@ basekit.addField({
     },
   ],
 
-  // ========== 返回类型：多行文本字段 ==========
+  // ========== 返回类型：附件字段 ==========
   resultType: {
-    type: FieldType.Text,
+    type: FieldType.Attachment,
   },
 
   // ========== 执行函数 ==========
   execute: async (formItemParams: any, context: any) => {
-    const { apiKey, text, duration, aspectRatio, resolution, images, generateAudio } = formItemParams;
+    const { apiKey, text, duration, aspectRatio, resolution, images, referenceVideo, generateAudio } = formItemParams;
     // Radio 组件返回 {label, value} 对象，需提取 value
     const durationVal = duration?.value ?? duration;
     const aspectRatioVal = aspectRatio?.value ?? aspectRatio;
@@ -240,6 +258,7 @@ basekit.addField({
       aspectRatio: aspectRatioVal,
       resolution: resolutionVal,
       imagesCount: images?.length || 0,
+      referenceVideoCount: referenceVideo?.length || 0,
       generateAudio: generateAudioVal,
     }));
 
@@ -261,19 +280,17 @@ basekit.addField({
       let imgUrl = '';
       let imgOssId = '';
       if (images && images.length > 0) {
-        console.log(`=== [OSS] Processing ${images.length} image attachment(s)`);
-        const img = images[0]; // 视频API取第一张作为参考图
-        console.log(`=== [OSS] Image 1: name=${img.name}, size=${img.size}, type=${img.type}`);
+        console.log(`=== [OSS-Img] Processing ${images.length} image attachment(s)`);
+        const img = images[0];
+        console.log(`=== [OSS-Img] Image 1: name=${img.name}, size=${img.size}, type=${img.type}`);
 
-        // 下载附件获取 buffer
         const imgRes = await context.fetch(img.tmp_url);
         if (!imgRes.ok) {
-          console.error(`=== [OSS] Failed to download image:`, imgRes.statusText);
+          console.error(`=== [OSS-Img] Failed to download image:`, imgRes.statusText);
           return { code: FieldCode.Error, msg: `${t('ossUploadFail')}: ${img.name}` };
         }
         const imgBuffer = await imgRes.buffer();
 
-        // 构造 multipart/form-data 上传到 OSS
         const boundary = `----FormBoundary${Date.now()}`;
         const imgBodyParts: string[] = [];
         imgBodyParts.push(`--${boundary}\r\n`);
@@ -283,7 +300,7 @@ basekit.addField({
         const footer = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf-8');
         const uploadBody = Buffer.concat([header, imgBuffer, footer]);
 
-        console.log(`=== [OSS] Uploading image to OSS...`);
+        console.log(`=== [OSS-Img] Uploading image to OSS...`);
         const ossRes = await context.fetch(`${API_BASE}/resource/oss/openApi/upload`, {
           method: 'POST',
           headers: {
@@ -293,15 +310,58 @@ basekit.addField({
           body: uploadBody,
         });
         const ossData = await ossRes.json();
-        console.log(`=== [OSS] Upload response:`, JSON.stringify(ossData));
+        console.log(`=== [OSS-Img] Upload response:`, JSON.stringify(ossData));
 
         if ((ossData.code !== 0 && ossData.code !== 200) || !ossData.data?.url) {
-          console.error(`=== [OSS] Upload failed:`, ossData.msg);
+          console.error(`=== [OSS-Img] Upload failed:`, ossData.msg);
           return { code: FieldCode.Error, msg: `${t('ossUploadFail')}: ${ossData.msg || img.name}` };
         }
         imgUrl = ossData.data.url;
         imgOssId = ossData.data.ossId || '';
-        console.log(`=== [OSS] Image uploaded, URL: ${imgUrl}, ossId: ${imgOssId}`);
+        console.log(`=== [OSS-Img] Image uploaded, URL: ${imgUrl}, ossId: ${imgOssId}`);
+      }
+
+      // 2b. 处理视频附件：下载并上传到 OSS
+      let contentVideoUrl = '';
+      if (referenceVideo && referenceVideo.length > 0) {
+        console.log(`=== [OSS-Video] Processing ${referenceVideo.length} video attachment(s)`);
+        const vid = referenceVideo[0];
+        console.log(`=== [OSS-Video] Video 1: name=${vid.name}, size=${vid.size}, type=${vid.type}`);
+
+        const vidRes = await context.fetch(vid.tmp_url);
+        if (!vidRes.ok) {
+          console.error(`=== [OSS-Video] Failed to download video:`, vidRes.statusText);
+          return { code: FieldCode.Error, msg: `${t('ossUploadFail')}: ${vid.name}` };
+        }
+        const vidBuffer = await vidRes.buffer();
+
+        const boundary = `----FormBoundary${Date.now()}`;
+        const vidBodyParts: string[] = [];
+        vidBodyParts.push(`--${boundary}\r\n`);
+        vidBodyParts.push(`Content-Disposition: form-data; name="file"; filename="${vid.name}"\r\n`);
+        vidBodyParts.push(`Content-Type: ${vid.type || 'application/octet-stream'}\r\n\r\n`);
+        const header = Buffer.from(vidBodyParts.join(''), 'utf-8');
+        const footer = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf-8');
+        const uploadBody = Buffer.concat([header, vidBuffer, footer]);
+
+        console.log(`=== [OSS-Video] Uploading video to OSS...`);
+        const ossRes = await context.fetch(`${API_BASE}/resource/oss/openApi/upload`, {
+          method: 'POST',
+          headers: {
+            ...authHeader,
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          },
+          body: uploadBody,
+        });
+        const ossData = await ossRes.json();
+        console.log(`=== [OSS-Video] Upload response:`, JSON.stringify(ossData));
+
+        if ((ossData.code !== 0 && ossData.code !== 200) || !ossData.data?.url) {
+          console.error(`=== [OSS-Video] Upload failed:`, ossData.msg);
+          return { code: FieldCode.Error, msg: `${t('ossUploadFail')}: ${ossData.msg || vid.name}` };
+        }
+        contentVideoUrl = ossData.data.url;
+        console.log(`=== [OSS-Video] Video uploaded, URL: ${contentVideoUrl}`);
       }
 
       // 3. 构造视频生成请求
@@ -323,6 +383,9 @@ basekit.addField({
       }
       if (imgOssId) {
         requestBody.imgOssId = imgOssId;
+      }
+      if (contentVideoUrl) {
+        requestBody.contentVideo = contentVideoUrl;
       }
       if (generateAudioVal === 'true') {
         requestBody.generateAudio = true;
@@ -405,7 +468,13 @@ basekit.addField({
       if (videoUrl) {
         return {
           code: FieldCode.Success,
-          data: videoUrl,
+          data: [
+            {
+              name: 'video.mp4',
+              content: videoUrl,
+              contentType: 'attachment/url',
+            },
+          ],
         };
       }
 
