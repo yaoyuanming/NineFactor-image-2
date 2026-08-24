@@ -10,7 +10,7 @@ const { t } = field;
 
 // ========== 常量配置 ==========
 const API_BASE = 'https://ai-base.theninefactor.com';
-const MODEL = 'gemini-3.5-flash';
+const MODEL = 'doubao-seedance-2-5-260628';
 
 // ========== 域名白名单 ==========
 basekit.addDomainList([
@@ -22,6 +22,10 @@ basekit.addDomainList([
   'internal-api-drive-stream.feishu.cn',
 ]);
 
+// ========== 轮询配置 ==========
+const POLL_INTERVAL_MS = 5000;   // 每5秒轮询一次
+const MAX_POLL_COUNT = 120;      // 最多轮询120次（共10分钟）
+
 // ========== 插件主体 ==========
 basekit.addField({
   authorizations: [],
@@ -31,45 +35,66 @@ basekit.addField({
     messages: {
       'zh-CN': {
         apiKeyLabel: '九因API key',
-        systemPromptLabel: '系统提示词',
-        systemPromptPlaceholder: '请输入系统提示词（设定AI角色与行为规则）',
-        userPromptLabel: '对话提示词',
-        userPromptPlaceholder: '请输入对话提示词（每次对话的用户消息）',
-        imagesLabel: '图片附件',
-        imagesPlaceholder: '选择图片附件字段（可选，支持多张图片）',
+        textLabel: '提示文本',
+        textPlaceholder: '请输入视频生成的提示文本描述',
+        durationLabel: '视频时长（秒）',
+        durationPlaceholder: '请输入视频持续时间（秒）',
+        aspectRatioLabel: '画面比例',
+        aspectRatioPlaceholder: '请选择画面比例（如 16:9、9:16、1:1）',
+        resolutionLabel: '视频分辨率',
+        resolutionPlaceholder: '请输入视频分辨率（如 480p、720p）',
+        imagesLabel: '参考图片附件',
+        imagesPlaceholder: '选择图片附件字段（可选，作为参考图）',
+        generateAudioLabel: '输出声音',
         noApiKey: '请输入九因API key',
-        noSystemPrompt: '请输入系统提示词',
-        noUserPrompt: '请输入对话提示词',
-        callFail: '对话请求失败',
+        noText: '请输入提示文本',
+        noDuration: '请输入视频时长',
+        callFail: '视频生成请求失败',
         ossUploadFail: '图片上传OSS失败',
+        taskTimeout: '视频生成任务超时未完成',
+        taskFailed: '视频生成失败',
       },
       'en-US': {
         apiKeyLabel: '九因API key',
-        systemPromptLabel: 'System Prompt',
-        systemPromptPlaceholder: 'Enter system prompt (define AI role and behavior rules)',
-        userPromptLabel: 'User Prompt',
-        userPromptPlaceholder: 'Enter user prompt (message for each conversation)',
-        imagesLabel: 'Image Attachments',
-        imagesPlaceholder: 'Select image attachment field (optional, multiple images supported)',
+        textLabel: 'Prompt Text',
+        textPlaceholder: 'Enter prompt text for video generation',
+        durationLabel: 'Duration (seconds)',
+        durationPlaceholder: 'Enter video duration in seconds',
+        aspectRatioLabel: 'Aspect Ratio',
+        aspectRatioPlaceholder: 'Select aspect ratio (e.g. 16:9, 9:16, 1:1)',
+        resolutionLabel: 'Resolution',
+        resolutionPlaceholder: 'Enter video resolution (e.g. 480p, 720p)',
+        imagesLabel: 'Reference Image Attachments',
+        imagesPlaceholder: 'Select image attachment field (optional, as reference image)',
+        generateAudioLabel: 'Output Audio',
         noApiKey: 'Please enter 九因API key',
-        noSystemPrompt: 'Please enter system prompt',
-        noUserPrompt: 'Please enter user prompt',
-        callFail: 'Chat request failed',
+        noText: 'Please enter prompt text',
+        noDuration: 'Please enter video duration',
+        callFail: 'Video generation request failed',
         ossUploadFail: 'Image upload to OSS failed',
+        taskTimeout: 'Video generation task timed out',
+        taskFailed: 'Video generation failed',
       },
       'ja-JP': {
         apiKeyLabel: '九因API key',
-        systemPromptLabel: 'システムプロンプト',
-        systemPromptPlaceholder: 'システムプロンプトを入力（AIの役割と動作ルールを設定）',
-        userPromptLabel: 'ユーザープロンプト',
-        userPromptPlaceholder: 'ユーザープロンプトを入力（会話のユーザーメッセージ）',
-        imagesLabel: '画像添付',
-        imagesPlaceholder: '画像添付フィールドを選択（オプション、複数画像対応）',
+        textLabel: 'プロンプトテキスト',
+        textPlaceholder: '動画生成のプロンプトテキストを入力',
+        durationLabel: '動画長さ（秒）',
+        durationPlaceholder: '動画の長さを入力（秒）',
+        aspectRatioLabel: 'アスペクト比',
+        aspectRatioPlaceholder: 'アスペクト比を選択（例: 16:9、9:16、1:1）',
+        resolutionLabel: '解像度',
+        resolutionPlaceholder: '動画解像度を入力（例: 480p、720p）',
+        imagesLabel: '参考画像添付',
+        imagesPlaceholder: '画像添付フィールドを選択（オプション、参考画像として使用）',
+        generateAudioLabel: 'オーディオ出力',
         noApiKey: '九因API keyを入力してください',
-        noSystemPrompt: 'システムプロンプトを入力してください',
-        noUserPrompt: 'ユーザープロンプトを入力してください',
-        callFail: 'チャットリクエストに失敗しました',
+        noText: 'プロンプトテキストを入力してください',
+        noDuration: '動画の長さを入力してください',
+        callFail: '動画生成リクエストに失敗しました',
         ossUploadFail: '画像のOSSアップロードに失敗しました',
+        taskTimeout: '動画生成タスクがタイムアウトしました',
+        taskFailed: '動画生成に失敗しました',
       },
     },
   },
@@ -103,25 +128,66 @@ basekit.addField({
       },
     },
     {
-      key: 'systemPrompt',
-      label: t('systemPromptLabel'),
+      key: 'text',
+      label: t('textLabel'),
       component: FieldComponent.Input,
       props: {
-        placeholder: t('systemPromptPlaceholder'),
+        placeholder: t('textPlaceholder'),
       },
+      validator: {
+        required: true,
+      },
+    },
+    {
+      key: 'duration',
+      label: t('durationLabel'),
+      component: FieldComponent.Radio,
+      props: {
+        options: [
+          { label: '智能时长', value: '-1' },
+          { label: '5秒', value: '5' },
+          { label: '10秒', value: '10' },
+          { label: '15秒', value: '15' },
+        ],
+      },
+      defaultValue: '-1',
+      validator: {
+        required: true,
+      },
+    },
+    {
+      key: 'aspectRatio',
+      label: t('aspectRatioLabel'),
+      component: FieldComponent.Radio,
+      props: {
+        options: [
+          { label: '智能', value: 'adaptive' },
+          { label: '1:1', value: '1:1' },
+          { label: '3:4', value: '3:4' },
+          { label: '4:3', value: '4:3' },
+          { label: '9:16', value: '9:16' },
+          { label: '16:9', value: '16:9' },
+          { label: '21:9', value: '21:9' },
+        ],
+      },
+      defaultValue: 'adaptive',
       validator: {
         required: false,
       },
     },
     {
-      key: 'userPrompt',
-      label: t('userPromptLabel'),
-      component: FieldComponent.Input,
+      key: 'resolution',
+      label: t('resolutionLabel'),
+      component: FieldComponent.Radio,
       props: {
-        placeholder: t('userPromptPlaceholder'),
+        options: [
+          { label: '480p', value: '480p' },
+          { label: '720p', value: '720p' },
+        ],
       },
+      defaultValue: '480p',
       validator: {
-        required: true,
+        required: false,
       },
     },
     {
@@ -136,6 +202,21 @@ basekit.addField({
         required: false,
       },
     },
+    {
+      key: 'generateAudio',
+      label: t('generateAudioLabel'),
+      component: FieldComponent.Radio,
+      props: {
+        options: [
+          { label: '是', value: 'true' },
+          { label: '否', value: 'false' },
+        ],
+      },
+      defaultValue: 'true',
+      validator: {
+        required: false,
+      },
+    },
   ],
 
   // ========== 返回类型：多行文本字段 ==========
@@ -145,122 +226,113 @@ basekit.addField({
 
   // ========== 执行函数 ==========
   execute: async (formItemParams: any, context: any) => {
-    const { apiKey, systemPrompt, userPrompt, images } = formItemParams;
+    const { apiKey, text, duration, aspectRatio, resolution, images, generateAudio } = formItemParams;
+    // Radio 组件返回 {label, value} 对象，需提取 value
+    const durationVal = duration?.value ?? duration;
+    const aspectRatioVal = aspectRatio?.value ?? aspectRatio;
+    const resolutionVal = resolution?.value ?? resolution;
+    const generateAudioVal = generateAudio?.value ?? generateAudio;
     console.log('=== [Execute] Input params:', JSON.stringify({
       apiKey: apiKey ? '***' + apiKey.slice(-4) : null,
-      systemPrompt: systemPrompt?.substring(0, 50) + '...',
-      userPrompt: userPrompt?.substring(0, 50) + '...',
+      model: MODEL,
+      text: text?.substring(0, 100) + '...',
+      duration: durationVal,
+      aspectRatio: aspectRatioVal,
+      resolution: resolutionVal,
       imagesCount: images?.length || 0,
+      generateAudio: generateAudioVal,
     }));
 
     // 1. 校验参数
     if (!apiKey || !apiKey.trim()) {
-      return {
-        code: FieldCode.InvalidArgument,
-        msg: t('noApiKey'),
-      };
+      return { code: FieldCode.InvalidArgument, msg: t('noApiKey') };
     }
-    if (!userPrompt || !userPrompt.trim()) {
-      return {
-        code: FieldCode.InvalidArgument,
-        msg: t('noUserPrompt'),
-      };
+    if (!text || !text.trim()) {
+      return { code: FieldCode.InvalidArgument, msg: t('noText') };
+    }
+    if (!durationVal || (durationVal !== '-1' && isNaN(Number(durationVal)))) {
+      return { code: FieldCode.InvalidArgument, msg: t('noDuration') };
     }
 
     const authHeader = { 'Open-Api-Token': apiKey.trim() };
 
     try {
       // 2. 处理图片附件：下载并上传到 OSS
-      const imageUrls: string[] = [];
+      let imgUrl = '';
+      let imgOssId = '';
       if (images && images.length > 0) {
         console.log(`=== [OSS] Processing ${images.length} image attachment(s)`);
-        for (let i = 0; i < images.length; i++) {
-          const img = images[i];
-          console.log(`=== [OSS] Image ${i + 1}: name=${img.name}, size=${img.size}, type=${img.type}`);
+        const img = images[0]; // 视频API取第一张作为参考图
+        console.log(`=== [OSS] Image 1: name=${img.name}, size=${img.size}, type=${img.type}`);
 
-          // 下载附件获取 buffer
-          const imgRes = await context.fetch(img.tmp_url);
-          if (!imgRes.ok) {
-            console.error(`=== [OSS] Failed to download image ${i + 1}:`, imgRes.statusText);
-            return { code: FieldCode.Error, msg: `${t('ossUploadFail')}: ${img.name}` };
-          }
-          const imgBuffer = await imgRes.buffer();
-
-          // 构造 multipart/form-data 上传到 OSS
-          const boundary = `----FormBoundary${Date.now()}${i}`;
-          const imgBodyParts: string[] = [];
-          imgBodyParts.push(`--${boundary}\r\n`);
-          imgBodyParts.push(`Content-Disposition: form-data; name="file"; filename="${img.name}"\r\n`);
-          imgBodyParts.push(`Content-Type: ${img.type || 'application/octet-stream'}\r\n\r\n`);
-          const header = Buffer.from(imgBodyParts.join(''), 'utf-8');
-          const footer = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf-8');
-          const uploadBody = Buffer.concat([header, imgBuffer, footer]);
-
-          console.log(`=== [OSS] Uploading image ${i + 1} to OSS...`);
-          const ossRes = await context.fetch(`${API_BASE}/resource/oss/openApi/upload`, {
-            method: 'POST',
-            headers: {
-              ...authHeader,
-              'Content-Type': `multipart/form-data; boundary=${boundary}`,
-            },
-            body: uploadBody,
-          });
-          const ossData = await ossRes.json();
-          console.log(`=== [OSS] Upload response ${i + 1}:`, JSON.stringify(ossData));
-
-          if ((ossData.code !== 0 && ossData.code !== 200) || !ossData.data?.url) {
-            console.error(`=== [OSS] Upload failed for image ${i + 1}:`, ossData.msg);
-            return { code: FieldCode.Error, msg: `${t('ossUploadFail')}: ${ossData.msg || img.name}` };
-          }
-          imageUrls.push(ossData.data.url);
-          console.log(`=== [OSS] Image ${i + 1} uploaded, URL: ${ossData.data.url}`);
+        // 下载附件获取 buffer
+        const imgRes = await context.fetch(img.tmp_url);
+        if (!imgRes.ok) {
+          console.error(`=== [OSS] Failed to download image:`, imgRes.statusText);
+          return { code: FieldCode.Error, msg: `${t('ossUploadFail')}: ${img.name}` };
         }
-      }
+        const imgBuffer = await imgRes.buffer();
 
-      // 3. 构造对话请求
-      const messages: any[] = [];
-      if (systemPrompt && systemPrompt.trim()) {
-        messages.push({
-          role: 'system',
-          content: systemPrompt.trim(),
+        // 构造 multipart/form-data 上传到 OSS
+        const boundary = `----FormBoundary${Date.now()}`;
+        const imgBodyParts: string[] = [];
+        imgBodyParts.push(`--${boundary}\r\n`);
+        imgBodyParts.push(`Content-Disposition: form-data; name="file"; filename="${img.name}"\r\n`);
+        imgBodyParts.push(`Content-Type: ${img.type || 'application/octet-stream'}\r\n\r\n`);
+        const header = Buffer.from(imgBodyParts.join(''), 'utf-8');
+        const footer = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf-8');
+        const uploadBody = Buffer.concat([header, imgBuffer, footer]);
+
+        console.log(`=== [OSS] Uploading image to OSS...`);
+        const ossRes = await context.fetch(`${API_BASE}/resource/oss/openApi/upload`, {
+          method: 'POST',
+          headers: {
+            ...authHeader,
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          },
+          body: uploadBody,
         });
-      }
+        const ossData = await ossRes.json();
+        console.log(`=== [OSS] Upload response:`, JSON.stringify(ossData));
 
-      // 构造 user message：有图片时用 content 数组（OpenAI vision 格式）
-      if (imageUrls.length > 0) {
-        const contentParts: any[] = [
-          { type: 'text', text: userPrompt.trim() },
-        ];
-        for (const url of imageUrls) {
-          contentParts.push({
-            type: 'image_url',
-            image_url: { url },
-          });
+        if ((ossData.code !== 0 && ossData.code !== 200) || !ossData.data?.url) {
+          console.error(`=== [OSS] Upload failed:`, ossData.msg);
+          return { code: FieldCode.Error, msg: `${t('ossUploadFail')}: ${ossData.msg || img.name}` };
         }
-        messages.push({ role: 'user', content: contentParts });
-      } else {
-        messages.push({ role: 'user', content: userPrompt.trim() });
+        imgUrl = ossData.data.url;
+        imgOssId = ossData.data.ossId || '';
+        console.log(`=== [OSS] Image uploaded, URL: ${imgUrl}, ossId: ${imgOssId}`);
       }
 
+      // 3. 构造视频生成请求
+      const dur = Number(durationVal);
       const requestBody: any = {
         model: MODEL,
-        messages,
-        stream: false,
+        text: text.trim(),
+        duration: dur === -1 ? -1 : dur,
       };
 
-      console.log('=== [Chat] Request URL:', `${API_BASE}/unified/openApi/v1/chat/completions`);
-      console.log('=== [Chat] Request Body:', JSON.stringify({
-        ...requestBody,
-        messages: messages.map((m: any) => ({
-          role: m.role,
-          content: typeof m.content === 'string'
-            ? m.content.substring(0, 100) + '...'
-            : m.content.map((c: any) => c.type === 'text' ? { type: 'text', text: c.text.substring(0, 100) + '...' } : c),
-        })),
-      }));
+      if (aspectRatioVal && aspectRatioVal !== 'adaptive') {
+        requestBody.aspectRatio = aspectRatioVal;
+      }
+      if (resolutionVal) {
+        requestBody.resolution = resolutionVal;
+      }
+      if (imgUrl) {
+        requestBody.imgUrl = imgUrl;
+      }
+      if (imgOssId) {
+        requestBody.imgOssId = imgOssId;
+      }
+      if (generateAudioVal === 'true') {
+        requestBody.generateAudio = true;
+      }
 
-      // 4. 发起对话请求
-      const chatRes = await context.fetch(`${API_BASE}/unified/openApi/v1/chat/completions`, {
+      console.log('=== [Create Task] Request URL:', `${API_BASE}/unified/ai/openApi/video/create`);
+      console.log('=== [Create Task] Request Body:', JSON.stringify(requestBody));
+
+      // 4. 创建视频生成任务
+      const createRes = await context.fetch(`${API_BASE}/unified/ai/openApi/video/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -268,58 +340,78 @@ basekit.addField({
         },
         body: JSON.stringify(requestBody),
       });
+      const createData = await createRes.json();
+      console.log('=== [Create Task] Response:', JSON.stringify(createData));
 
-      // 5. 解析响应（支持 SSE 流式和普通 JSON 两种格式）
-      const responseText = await chatRes.text();
-      console.log('=== [Chat] Response (first 500 chars):', responseText.substring(0, 500));
-
-      let chatData: any = null;
-      let replyContent = '';
-
-      // 尝试解析为普通 JSON
-      try {
-        chatData = JSON.parse(responseText);
-      } catch {
-        // 非 JSON，尝试按 SSE 格式解析
-        const lines = responseText.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data:')) {
-            const dataStr = line.slice(5).trim();
-            if (dataStr === '[DONE]') continue;
-            try {
-              const chunk = JSON.parse(dataStr);
-              const delta = chunk?.choices?.[0]?.delta?.content || chunk?.choices?.[0]?.message?.content;
-              if (delta) {
-                replyContent += delta;
-              }
-            } catch {
-              // 忽略解析失败的行
-            }
-          }
-        }
+      if ((createData.code !== 0 && createData.code !== 200) || !createData.data?.id) {
+        return {
+          code: FieldCode.Error,
+          msg: `${t('callFail')}: ${createData.msg || 'unknown error'}`,
+        };
       }
 
-      // 普通 JSON 响应处理
-      if (chatData) {
-        if (chatData.code !== undefined && chatData.code !== 200) {
+      const taskId = createData.data.id;
+      console.log(`=== [Create Task] Task created, id: ${taskId}`);
+
+      // 5. 轮询任务状态
+      let videoUrl = '';
+      let taskStatus = '';
+      for (let i = 0; i < MAX_POLL_COUNT; i++) {
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+
+        const pollUrl = `${API_BASE}/unified/ai/openApi/video/get?id=${taskId}`;
+        console.log(`=== [Poll] Poll #${i + 1}: GET ${pollUrl}`);
+
+        const pollRes = await context.fetch(pollUrl, {
+          method: 'GET',
+          headers: { ...authHeader },
+        });
+        const pollData = await pollRes.json();
+        console.log(`=== [Poll] Poll #${i + 1} Response:`, JSON.stringify(pollData));
+
+        if ((pollData.code !== 0 && pollData.code !== 200) || !pollData.data) {
+          console.error(`=== [Poll] Poll failed:`, pollData.msg);
+          continue;
+        }
+
+        taskStatus = pollData.data.status;
+        console.log(`=== [Poll] Task status: ${taskStatus}, progress: ${pollData.data.progress}%`);
+
+        if (taskStatus === 'succeeded') {
+          videoUrl = pollData.data.videoUrl || '';
+          console.log(`=== [Generated URL] videoUrl: ${videoUrl}`);
+          break;
+        }
+
+        if (taskStatus === 'failed') {
+          const failReason = pollData.data.failReason || 'unknown';
+          console.error(`=== [Poll] Task failed: ${failReason}`);
           return {
             code: FieldCode.Error,
-            msg: `${t('callFail')}: ${chatData.msg || 'unknown error'}`,
+            msg: `${t('taskFailed')}: ${failReason}`,
           };
         }
-        replyContent = chatData?.choices?.[0]?.message?.content || chatData?.data?.content || '';
+
+        // running / queued → 继续轮询
       }
 
-      if (replyContent) {
+      if (!videoUrl && taskStatus !== 'succeeded') {
+        return {
+          code: FieldCode.Error,
+          msg: t('taskTimeout'),
+        };
+      }
+
+      if (videoUrl) {
         return {
           code: FieldCode.Success,
-          data: replyContent,
+          data: videoUrl,
         };
       }
 
       return {
         code: FieldCode.Error,
-        msg: `${t('callFail')}: 响应中未包含有效内容`,
+        msg: `${t('callFail')}: 响应中未包含有效视频URL`,
       };
     } catch (err: any) {
       console.error('===捷径执行异常:', err);
