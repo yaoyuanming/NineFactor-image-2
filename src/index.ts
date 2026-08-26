@@ -35,8 +35,8 @@ basekit.addField({
         systemPromptPlaceholder: '请输入系统提示词（设定AI角色与行为规则）',
         userPromptLabel: '对话提示词',
         userPromptPlaceholder: '请输入对话提示词（每次对话的用户消息）',
-        imagesLabel: '图片附件',
-        imagesPlaceholder: '选择图片附件字段（可选，支持多张图片）',
+        imagesLabel: '参考图片',
+        imagesPlaceholder: '选择图片附件字段（可选，可多选）',
         noApiKey: '请输入九因API key',
         noSystemPrompt: '请输入系统提示词',
         noUserPrompt: '请输入对话提示词',
@@ -49,8 +49,8 @@ basekit.addField({
         systemPromptPlaceholder: 'Enter system prompt (define AI role and behavior rules)',
         userPromptLabel: 'User Prompt',
         userPromptPlaceholder: 'Enter user prompt (message for each conversation)',
-        imagesLabel: 'Image Attachments',
-        imagesPlaceholder: 'Select image attachment field (optional, multiple images supported)',
+        imagesLabel: 'Reference Images',
+        imagesPlaceholder: 'Select image attachment fields (optional, multiple select)',
         noApiKey: 'Please enter 九因API key',
         noSystemPrompt: 'Please enter system prompt',
         noUserPrompt: 'Please enter user prompt',
@@ -63,8 +63,8 @@ basekit.addField({
         systemPromptPlaceholder: 'システムプロンプトを入力（AIの役割と動作ルールを設定）',
         userPromptLabel: 'ユーザープロンプト',
         userPromptPlaceholder: 'ユーザープロンプトを入力（会話のユーザーメッセージ）',
-        imagesLabel: '画像添付',
-        imagesPlaceholder: '画像添付フィールドを選択（オプション、複数画像対応）',
+        imagesLabel: '参考画像',
+        imagesPlaceholder: '画像添付フィールドを選択（オプション、複数選択可）',
         noApiKey: '九因API keyを入力してください',
         noSystemPrompt: 'システムプロンプトを入力してください',
         noUserPrompt: 'ユーザープロンプトを入力してください',
@@ -131,6 +131,7 @@ basekit.addField({
       props: {
         placeholder: t('imagesPlaceholder'),
         supportType: [FieldType.Attachment],
+        mode: 'multiple',
       },
       validator: {
         required: false,
@@ -146,11 +147,23 @@ basekit.addField({
   // ========== 执行函数 ==========
   execute: async (formItemParams: any, context: any) => {
     const { apiKey, systemPrompt, userPrompt, images } = formItemParams;
+    // images 为二维数组：每个选中的附件字段对应一个附件数组，需扁平化
+    const allImages: any[] = [];
+    if (images) {
+      for (const fieldImages of images) {
+        if (Array.isArray(fieldImages)) {
+          allImages.push(...fieldImages);
+        } else if (fieldImages) {
+          allImages.push(fieldImages);
+        }
+      }
+    }
     console.log('=== [Execute] Input params:', JSON.stringify({
       apiKey: apiKey ? '***' + apiKey.slice(-4) : null,
       systemPrompt: systemPrompt?.substring(0, 50) + '...',
       userPrompt: userPrompt?.substring(0, 50) + '...',
-      imagesCount: images?.length || 0,
+      imageFieldsCount: Array.isArray(images) ? images.length : 0,
+      totalImages: allImages.length,
     }));
 
     // 1. 校验参数
@@ -170,12 +183,12 @@ basekit.addField({
     const authHeader = { 'Open-Api-Token': apiKey.trim() };
 
     try {
-      // 2. 处理图片附件：下载并上传到 OSS
+      // 2. 处理图片附件：从多个附件字段收集所有图片，下载并上传到 OSS
       const imageUrls: string[] = [];
-      if (images && images.length > 0) {
-        console.log(`=== [OSS] Processing ${images.length} image attachment(s)`);
-        for (let i = 0; i < images.length; i++) {
-          const img = images[i];
+      if (allImages.length > 0) {
+        console.log(`=== [OSS] Processing ${allImages.length} image(s) from multiple fields`);
+        for (let i = 0; i < allImages.length; i++) {
+          const img = allImages[i];
           console.log(`=== [OSS] Image ${i + 1}: name=${img.name}, size=${img.size}, type=${img.type}`);
 
           // 下载附件获取 buffer
