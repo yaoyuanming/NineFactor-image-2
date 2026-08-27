@@ -135,6 +135,7 @@ basekit.addField({
       component: FieldComponent.FieldSelect,
       props: {
         supportType: [FieldType.Attachment],
+        mode: 'multiple',
       },
       validator: {
         required: false,
@@ -228,19 +229,23 @@ basekit.addField({
     const authHeader = { 'Open-Api-Token': apiKey.trim() };
 
     try {
-      // 2. 上传参考图片到 OSS（如果有）
-      let imgOssId: string | null = null;
-      let imgUrl: string | null = null;
-      if (refImage && refImage.length > 0 && refImage[0].tmp_url) {
-        const ossResult = await uploadImageToOss(refImage[0], context, apiKey.trim());
-        if (!ossResult) {
-          return {
-            code: FieldCode.Error,
-            msg: t('uploadFail'),
-          };
+      // 2. 上传参考图片到 OSS（支持多选）
+      let imgOssIds: string[] = [];
+      let imgUrls: string[] = [];
+      if (refImage && refImage.length > 0) {
+        for (let i = 0; i < refImage.length; i++) {
+          const img = refImage[i];
+          if (!img.tmp_url) continue;
+          const ossResult = await uploadImageToOss(img, context, apiKey.trim());
+          if (!ossResult) {
+            return {
+              code: FieldCode.Error,
+              msg: `${t('uploadFail')}: ${img.name || 'image_' + (i + 1)}`,
+            };
+          }
+          imgOssIds.push(ossResult.ossId);
+          imgUrls.push(ossResult.url);
         }
-        imgOssId = ossResult.ossId;
-        imgUrl = ossResult.url;
       }
 
       // 3. 创建图片生成任务
@@ -250,11 +255,11 @@ basekit.addField({
         size: size,
         quality: quality?.value || 'medium',
       };
-      if (imgOssId) {
-        createBody.imgOssId = imgOssId;
+      if (imgOssIds.length > 0) {
+        createBody.imgOssId = imgOssIds;
       }
-      if (imgUrl) {
-        createBody.imgUrl = imgUrl;
+      if (imgUrls.length > 0) {
+        createBody.imgUrl = imgUrls;
       }
 
       console.log('=== [Create Task] Request URL:', `${API_BASE}/unified/ai/openApi/image/create`);
