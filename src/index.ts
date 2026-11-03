@@ -264,7 +264,7 @@ basekit.addField({
       // 3. 创建图片生成任务
       const createBody: any = {
         text: prompt.trim(),
-        model: 'gpt-image-2.5-flare',
+        model: 'gpt-image-2.5-sunburst',
         size: size,
         quality: quality?.value || 'medium',
       };
