@@ -184,6 +184,9 @@ basekit.addField({
           { label: '低 (Low)', value: 'low' },
           { label: '中 (Medium)', value: 'medium' },
           { label: '高 (High)', value: 'high' },
+          { label: '超高 (XHigh)', value: 'xhigh' },
+          { label: '最高 (Max)', value: 'max' },
+          { label: '自动 (Auto)', value: 'auto' },
         ],
       },
       validator: {
@@ -208,6 +211,7 @@ basekit.addField({
       resolution: resolution?.value,
       quality: quality?.value,
     }));
+    console.log('=== [Execute] Raw refImage structure:', JSON.stringify(refImage));
 
     // 根据比例和分辨率计算实际像素尺寸
     const size = computeSize(aspectRatio?.value || '1:1', resolution?.value || '1K');
@@ -232,10 +236,19 @@ basekit.addField({
       // 2. 上传参考图片到 OSS（支持多选）
       let imgOssIds: string[] = [];
       let imgUrls: string[] = [];
-      if (refImage && refImage.length > 0) {
-        for (let i = 0; i < refImage.length; i++) {
-          const img = refImage[i];
-          if (!img.tmp_url) continue;
+      // FieldSelect(multiple) 返回的可能是多层嵌套数组（如 [[{...}]]），先扁平化再取真正的附件对象
+      const flatImages: any[] = (Array.isArray(refImage) ? refImage : [])
+        .flat(Infinity)
+        .filter((x: any) => x && typeof x === 'object');
+      console.log('=== [RefImage] Flattened count:', flatImages.length);
+      if (flatImages.length > 0) {
+        for (let i = 0; i < flatImages.length; i++) {
+          const img = flatImages[i];
+          console.log(`=== [RefImage] Item ${i} raw:`, JSON.stringify(img));
+          if (!img.tmp_url) {
+            console.warn(`=== [RefImage] Item ${i} has no tmp_url, skipped. Available keys:`, Object.keys(img || {}));
+            continue;
+          }
           const ossResult = await uploadImageToOss(img, context, apiKey.trim());
           if (!ossResult) {
             return {
@@ -251,15 +264,16 @@ basekit.addField({
       // 3. 创建图片生成任务
       const createBody: any = {
         text: prompt.trim(),
-        model: 'gpt-image-2',
+        model: 'gpt-image-2.5-flare',
         size: size,
         quality: quality?.value || 'medium',
       };
+      // 后端 UnifiedImageRequest.imgOssId / imgUrl 为单个 String 类型，多张参考图用逗号拼接
       if (imgOssIds.length > 0) {
-        createBody.imgOssId = imgOssIds;
+        createBody.imgOssId = imgOssIds.join(',');
       }
       if (imgUrls.length > 0) {
-        createBody.imgUrl = imgUrls;
+        createBody.imgUrl = imgUrls.join(',');
       }
 
       console.log('=== [Create Task] Request URL:', `${API_BASE}/unified/ai/openApi/image/create`);
